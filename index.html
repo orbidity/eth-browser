@@ -38,21 +38,28 @@
 //             `
 //         });
         worker.postMessage({
-            type: "simulate",
-            game: "blackjack",
+            type: "playGame",
+            game: "tic_tac_toe",
             code: `
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-import { Blackjack_strategy, Action } from "./blackjack.sol";
+import { Tic_tac_toe_strategy, Player } from "./tic_tac_toe.sol";
 
-contract CustomStrategy is Blackjack_strategy {
-    function get_action(uint hand) external override pure returns (Action) {
-        if (hand < 21) {
-            return Action.Hit;
-        } else {
-            return Action.Stop;
+contract CustomStrategy is Tic_tac_toe_strategy {
+    function get_move(Player[] memory _board) external override pure returns (uint) {
+        // Returns first free position
+        for (uint i = 0; i < _board.length; i++) {
+            if (_board[i] == Player.None) return i;
         }
+        
+        // Returns last free position
+        // for (uint i = _board.length - 1; i >= 0; i--) {
+        //     if (_board[i] == Player.None) return i;
+        // }
+        
+        // Cannot reach here
+        revert();
     }
 }
             `
