@@ -1,0 +1,3 @@
+[submodule "src/eth"]
+	path = src/eth
+	url = https://github.com/orbidity/eth.git

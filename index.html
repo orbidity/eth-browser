@@ -12,28 +12,47 @@
         const worker = new Worker('/dist/worker.js');
         worker.addEventListener("message", (e) => {
            console.log("event", e.data);
+           if(e.data.type === "simulateResult") {
+               console.log(e.data.result);
+           }
         });
+//         worker.postMessage({
+//             type: "simulate",
+//             game: "tic_tac_toe",
+//             code: `
+// // SPDX-License-Identifier: MIT
+// pragma solidity ^0.8.7;
+//
+// import { Tic_tac_toe_strategy, Player } from "./tic_tac_toe.sol";
+//
+// contract CustomStrategy is Tic_tac_toe_strategy {
+//     function get_move(Player[] memory _board) external override pure returns (uint) {
+//         // Returns first free position
+//         for (uint i = 0; i < _board.length; i++) {
+//             if (_board[i] == Player.None) return i;
+//         }
+//         // Cannot reach here
+//         revert();
+//     }
+// }
+//             `
+//         });
         worker.postMessage({
             type: "simulate",
-            game: "tic_tac_toe",
+            game: "blackjack",
             code: `
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-enum Player { None, One, Two }
+import { Blackjack_strategy, Action } from "./blackjack.sol";
 
-interface Strategy {
-    function get_move(Player[] memory) external pure returns (uint);
-}
-
-contract BasicStrategy {
-    function get_move(Player[] memory board) external pure returns (uint) {
-        for (uint i = 0; i < board.length; i++) {
-            if (board[i] == Player.None) {
-                return i;
-            }
+contract CustomStrategy is Blackjack_strategy {
+    function get_action(uint hand) external override pure returns (Action) {
+        if (hand < 21) {
+            return Action.Hit;
+        } else {
+            return Action.Stop;
         }
-        return 0;
     }
 }
             `
