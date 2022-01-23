@@ -1,6 +1,7 @@
 // Declare global types imported by importScripts()
 import type Web3Type from "web3";
 import type { AbiItem } from "web3-utils";
+import type { Contract } from "web3-eth-contract";
 // @ts-expect-error solc doesn't have type definitions
 import wrapper from "solc/wrapper";
 import { Buffer } from "buffer";
@@ -120,34 +121,86 @@ web3.eth.subscribe("newBlockHeaders", (err, blockHeader) => {
 //   else postMessage({ type: "log", log });
 // });
 
+// Import Solidity contracts
 import gameContractCode from "./game.sol";
 import ticTacToeContractCode from "./tic_tac_toe.sol";
 import basicStrategyContractCode from "./basic_strategy.sol";
 
-addEventListener("message", async (event) => {
-  const { Tic_tac_toe: game } = await compileContracts<"Tic_tac_toe">(
+// Compile and deploy shared Solidity contracts to local Ethereum network
+const imports = { "game.sol": gameContractCode };
+let accounts: string[];
+let ticTacToeContract: Contract;
+let ticTacToeBasicStrategyContract: Contract;
+const initPromise = (async () => {
+  const { Tic_tac_toe } = await compileContracts<"Tic_tac_toe">(
     ticTacToeContractCode,
-    { "game.sol": gameContractCode }
+    imports
   );
-  const { BasicStrategy: strategy } = await compileContracts<"BasicStrategy">(
+  const { BasicStrategy } = await compileContracts<"BasicStrategy">(
     basicStrategyContractCode
   );
 
-  const accounts = await web3.eth.getAccounts();
-  const player1StrategyContract = await deployContract(strategy, accounts[1]);
-  const player2StrategyContract = await deployContract(strategy, accounts[2]);
-  const gameContract = await deployContract(game, accounts[0]);
-
-  const txn = await gameContract.methods
-    .play([
-      player1StrategyContract.options.address,
-      player2StrategyContract.options.address,
-    ])
-    .send({ from: accounts[0], gas: 10000000 });
-
-  const boards: string[][] = txn.events["State_event"].map(
-    (event: any) => event.returnValues.board
+  accounts = await web3.eth.getAccounts();
+  ticTacToeContract = await deployContract(Tic_tac_toe, accounts[0]);
+  ticTacToeBasicStrategyContract = await deployContract(
+    BasicStrategy,
+    accounts[1]
   );
+})();
 
-  postMessage({ type: "result", result: boards });
+type Payload =
+  | {
+      type: "compile";
+      code: string;
+    }
+  | {
+      type: "simulate";
+      code: string;
+      game: "tic_tac_toe" | "blackjack";
+    };
+
+addEventListener("message", async (event: MessageEvent<Payload>) => {
+  if (event.data.type === "compile") {
+    const contracts = await compileContracts(event.data.code);
+    postMessage({ type: "compileResult", contracts });
+  } else if (event.data.type === "simulate") {
+    // Wait for contracts to be deployed
+    await initPromise;
+
+    // Get game and basic strategy contract instances
+    const gameContract =
+      event.data.game === "tic_tac_toe"
+        ? ticTacToeContract
+        : // TODO: switch to blackjack
+          ticTacToeContract;
+    const basicStrategyContract =
+      event.data.game === "tic_tac_toe"
+        ? ticTacToeBasicStrategyContract
+        : // TODO: switch to blackjack
+          ticTacToeBasicStrategyContract;
+
+    // Compile and deploy user strategy to local Ethereum network
+    const { BasicStrategy } = await compileContracts<"BasicStrategy">(
+      event.data.code
+    );
+    const userStrategyContract = await deployContract(
+      BasicStrategy,
+      accounts[2]
+    );
+
+    // Play game using user's strategy
+    const txn = await gameContract.methods
+      .play([
+        basicStrategyContract.options.address,
+        userStrategyContract.options.address,
+      ])
+      .send({ from: accounts[0], gas: 10000000 });
+
+    // Extract game states from each turn
+    const boards: string[][] = txn.events["State_event"].map(
+      (event: any) => event.returnValues.board
+    );
+
+    postMessage({ type: "simulateResult", result: boards });
+  }
 });
