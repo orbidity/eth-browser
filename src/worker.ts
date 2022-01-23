@@ -97,6 +97,8 @@ async function deployContract(
   args?: any[]
 ) {
   // Deploy contract to local Ethereum network
+  console.log(contract.bytecode);
+  console.log(web3.utils.isHex(contract.bytecode));
   return new web3.eth.Contract(contract.abi)
     .deploy({ data: contract.bytecode, arguments: args })
     .send({ from: account, gas: 10000000 });
@@ -122,12 +124,18 @@ web3.eth.subscribe("newBlockHeaders", (err, blockHeader) => {
 // });
 
 // Import Solidity contracts
+import gamesCode from "./eth/game/games.sol";
+import orbCode from "./eth/game/orb.sol";
+import safeMathCode from "./eth/game/safe_math.sol";
 import gameCode from "./eth/game/game.sol";
 import ticTacToeCode from "./eth/game/tic_tac_toe.sol";
 import blackjackCode from "./eth/game/blackjack.sol";
 
 // Compile and deploy shared Solidity contracts to local Ethereum network
 const imports = {
+  "games.sol": gamesCode,
+  "orb.sol": orbCode,
+  "safe_math.sol": safeMathCode,
   "game.sol": gameCode,
   "tic_tac_toe.sol": ticTacToeCode,
   "blackjack.sol": blackjackCode,
@@ -141,28 +149,51 @@ let ticTacToeBasicStrategyContract: Contract;
 let blackjackContract: Contract;
 let blackjackBasicStrategyContract: Contract;
 
+let gamesContract: Contract;
+let orbsContract: Contract;
+
+// Whether to run offline or online
+const ENV_TYPE: string = "offline";
+
 const initPromise = (async () => {
-  const { Tic_tac_toe, Strategy_3 } = await compileContracts<
-    "Tic_tac_toe" | "Strategy_3"
-  >(ticTacToeCode, imports);
-  const { Blackjack, Strategy_2 } = await compileContracts<
-    "Blackjack" | "Strategy_1" | "Strategy_2"
-  >(blackjackCode, imports);
+  if (ENV_TYPE == "offline") {
 
-  accounts = await web3.eth.getAccounts();
+    const { Games } = await compileContracts<
+      "Games"
+      >(gamesCode, imports);
 
-  ticTacToeContract = await deployContract(Tic_tac_toe, accounts[0]);
-  ticTacToeBasicStrategyContract = await deployContract(
-    Strategy_3,
-    accounts[1]
-  );
+    accounts = await web3.eth.getAccounts();
+    let deployAccount: string = accounts[0];
 
-  blackjackContract = await deployContract(Blackjack, accounts[0]);
-  blackjackBasicStrategyContract = await deployContract(
-    Strategy_2,
-    accounts[1]
-  );
+    gamesContract = await deployContract(Games, deployAccount);
+
+    orbsContract = await gamesContract.methods.orb().call();
+    console.log(orbsContract);
+
+    // old code
+    const { Tic_tac_toe, Strategy_3 } = await compileContracts<
+      "Tic_tac_toe" | "Strategy_3"
+    >(ticTacToeCode, imports);
+    const { Blackjack, Strategy_2 } = await compileContracts<
+      "Blackjack" | "Strategy_1" | "Strategy_2"
+    >(blackjackCode, imports);
+
+    accounts = await web3.eth.getAccounts();
+
+    ticTacToeContract = await deployContract(Tic_tac_toe, accounts[0]);
+    ticTacToeBasicStrategyContract = await deployContract(
+      Strategy_3,
+      accounts[1]
+    );
+
+    blackjackContract = await deployContract(Blackjack, accounts[0]);
+    blackjackBasicStrategyContract = await deployContract(
+      Strategy_2,
+      accounts[1]
+    );
+  }
 })();
+
 
 type Payload =
   | {
